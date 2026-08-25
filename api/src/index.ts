@@ -57,7 +57,7 @@ export { io }
 // ─── Routes ──────────────────────────────────────────
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'CodePulse API is running' })
+  res.json({ status: 'ok', message: 'DevRoom API is running' })
 })
 
 app.post('/execute', async (req, res) => {

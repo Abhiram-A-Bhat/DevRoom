@@ -2,7 +2,7 @@ import { Kafka } from "kafkajs";
 import { executeCode } from "./executor.js";
 
 const kafka = new Kafka({
-  clientId: "codepulse-worker",
+  clientId: "devroom-worker",
   brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
 });
 

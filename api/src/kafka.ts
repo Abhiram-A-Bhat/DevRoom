@@ -3,7 +3,7 @@ import type { Producer, Consumer } from "kafkajs";
 import { pool } from "./db.js";
 
 const kafka = new Kafka({
-  clientId: "codepulse-api",
+  clientId: "devroom-api",
   brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
 });
 

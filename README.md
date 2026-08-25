@@ -1,4 +1,4 @@
-# ⚡ CodePulse
+# ⚡ DevRoom
 
 > **Real-time collaborative code execution platform.** Write code together, run it in isolated Docker sandboxes, watch output stream back live.
 
@@ -23,7 +23,7 @@
 
 Imagine Google Docs — but instead of writing essays together, you and your friends write **code** together. When you press "Run", your code doesn't run on your laptop. It flies through the internet, lands on a server, gets locked inside a tiny secure box (a Docker container), runs there safely, and the result comes back to everyone in the room within a second.
 
-That's CodePulse. A **safe, real-time, multiplayer coding playground**.
+That's DevRoom. A **safe, real-time, multiplayer coding playground**.
 
 ---
 

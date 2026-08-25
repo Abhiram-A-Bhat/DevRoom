@@ -24,11 +24,11 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: codepulse-db
+    container_name: devroom-db
     environment:
-      POSTGRES_USER: codepulse
-      POSTGRES_PASSWORD: codepulse123
-      POSTGRES_DB: codepulsedb
+      POSTGRES_USER: devroom
+      POSTGRES_PASSWORD: devroom123
+      POSTGRES_DB: devroomdb
     ports:
       - "5432:5432"
     volumes:

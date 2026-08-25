@@ -7,12 +7,12 @@ import { submitCode } from "./lib/api";
 const LANGUAGES = ["python", "javascript", "java"];
 
 const DEFAULT_CODE: Record<string, string> = {
-  python: `print("Hello from CodePulse!")
+  python: `print("Hello from DevRoom!")
 
 for i in range(5):
     print(f"Line {i}")`,
 
-  javascript: `console.log("Hello from CodePulse!");
+  javascript: `console.log("Hello from DevRoom!");
 
 for (let i = 0; i < 5; i++) {
   console.log(\`Line \${i}\`);
@@ -20,7 +20,7 @@ for (let i = 0; i < 5; i++) {
 
   java: `public class Solution {
     public static void main(String[] args) {
-        System.out.println("Hello from CodePulse!");
+        System.out.println("Hello from DevRoom!");
     }
 }`,
 };
@@ -97,7 +97,7 @@ export default function App() {
         {/* Left — Brand + Room */}
         <div className="flex items-center gap-3">
           <span className="text-green-400 font-bold text-xl tracking-tight">
-            ⚡ CodePulse
+            ⚡ DevRoom
           </span>
 
           <button

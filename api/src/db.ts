@@ -5,9 +5,9 @@ const { Pool } = pg;
 export const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
   port: 5432,
-  user: "codepulse",
-  password: "codepulse123",
-  database: "codepulsedb",
+  user: "devroom",
+  password: "devroom123",
+  database: "devroomdb",
 });
 
 pool.on("connect", () => {
