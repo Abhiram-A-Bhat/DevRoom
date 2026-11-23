@@ -10,13 +10,25 @@ const app = express()
 const httpServer = createServer(app)
 
 // Create Socket.io server
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+
 const io = new SocketServer(httpServer, {
-  cors: { origin: 'http://localhost:5173' },
+  cors: { origin: allowedOrigins },
+  maxHttpBufferSize: 100_000,
 })
 
-const PORT = 4000
+const PORT = Number(process.env.PORT || 4000)
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 20)
+const executionCounts = new Map<string, { count: number; resetAt: number }>()
 
-app.use(cors())
+// Caddy is the single trusted proxy in production
+if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1)
+
+app.use(cors({ origin: allowedOrigins }))
 app.use(express.json({ limit: '100kb' }))
 
 const SUPPORTED_LANGUAGES = ['python', 'javascript', 'java'] as const
@@ -60,14 +72,37 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'DevRoom API is running' })
 })
 
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  for (const [key, entry] of executionCounts) {
+    if (entry.resetAt <= now) executionCounts.delete(key)
+  }
+  const entry = executionCounts.get(ip)
+  if (!entry) {
+    executionCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS })
+    return false
+  }
+  entry.count += 1
+  return entry.count > RATE_LIMIT_MAX
+}
+
 app.post('/execute', async (req, res) => {
+  if (isRateLimited(req.ip || 'unknown')) {
+    res.status(429).json({ error: 'Too many runs. Try again in a minute.' })
+    return
+  }
+
   const body = req.body as ExecuteRequest
   const roomId = body.roomId || 'local-dev-room'
   const code = body.code
   const language = body.language
 
-  if (!code || !language) {
+  if (typeof code !== 'string' || !code || typeof language !== 'string' || !language) {
     res.status(400).json({ error: 'code and language are required' })
+    return
+  }
+  if (typeof roomId !== 'string' || roomId.length > 50) {
+    res.status(400).json({ error: 'Invalid roomId' })
     return
   }
   if (!isSupportedLanguage(language)) {
@@ -112,7 +147,8 @@ app.post('/execute', async (req, res) => {
 
 app.get('/history/:roomId', async (req, res) => {
   const { roomId } = req.params
-  const limit = parseInt((req.query.limit as string) || '20')
+  const requestedLimit = parseInt((req.query.limit as string) || '20')
+  const limit = Number.isNaN(requestedLimit) ? 20 : Math.min(Math.max(requestedLimit, 1), 100)
 
   try {
     const result = await pool.query(

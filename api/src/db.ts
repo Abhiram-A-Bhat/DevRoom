@@ -4,10 +4,10 @@ const { Pool } = pg;
 
 export const pool = new Pool({
   host: process.env.DB_HOST || "localhost",
-  port: 5432,
-  user: "devroom",
-  password: "devroom123",
-  database: "devroomdb",
+  port: Number(process.env.DB_PORT || 5432),
+  user: process.env.DB_USER || "devroom",
+  password: process.env.DB_PASSWORD || "devroom123",
+  database: process.env.DB_NAME || "devroomdb",
 });
 
 pool.on("connect", () => {

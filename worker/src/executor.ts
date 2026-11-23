@@ -42,6 +42,27 @@ export interface ExecutionResult {
   status: "success" | "error" | "timeout";
 }
 
+const MAX_STDOUT_BYTES = 10_000;
+const MAX_STDERR_BYTES = 5_000;
+
+function pullImage(image: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    docker.pull(image, (err: Error | null, stream?: NodeJS.ReadableStream) => {
+      if (err || !stream) return reject(err ?? new Error(`Could not pull ${image}`));
+      docker.modem.followProgress(stream, (progressErr: Error | null) =>
+        progressErr ? reject(progressErr) : resolve(),
+      );
+    });
+  });
+}
+
+export async function prepareImages(): Promise<void> {
+  for (const { image } of Object.values(LANGUAGE_CONFIGS)) {
+    console.log(`[WORKER] Pulling ${image}`);
+    await pullImage(image);
+  }
+}
+
 export async function executeCode(
   language: string,
   code: string,
@@ -52,8 +73,8 @@ export async function executeCode(
   const startTime = Date.now();
   let container: Docker.Container | null = null;
 
-  // Escape single quotes so shell heredoc works
-  const escapedCode = code.replace(/'/g, `'\\''`);
+  // Base64 keeps user code from being interpreted by the wrapper shell
+  const encodedCode = Buffer.from(code, "utf8").toString("base64");
 
   try {
     container = await docker.createContainer({
@@ -61,8 +82,10 @@ export async function executeCode(
       Cmd: [
         "sh",
         "-c",
-        `cat > ${config.filename} << 'CODEEOF'\n${escapedCode}\nCODEEOF\n${config.runCmd}`,
+        `printf %s '${encodedCode}' | base64 -d > ${config.filename} && ${config.runCmd}`,
       ],
+      User: "65534:65534",
+      WorkingDir: "/sandbox",
       AttachStdout: true,
       AttachStderr: true,
       Tty: false,
@@ -71,19 +94,29 @@ export async function executeCode(
         Memory: 128 * 1024 * 1024, // 128 MB RAM cap
         CpuPeriod: 100_000,
         CpuQuota: 50_000, // 50% CPU cap
-        AutoRemove: true, // Auto-cleanup
+        MemorySwap: 128 * 1024 * 1024, // No swap beyond the RAM cap
+        PidsLimit: 64, // Stops fork bombs
+        CapDrop: ["ALL"],
+        SecurityOpt: ["no-new-privileges"],
+        ReadonlyRootfs: true,
+        Tmpfs: {
+          "/sandbox": "rw,nosuid,nodev,size=16m,uid=65534,gid=65534,mode=700",
+          "/tmp": "rw,nosuid,nodev,size=16m,uid=65534,gid=65534,mode=700",
+        },
+        Ulimits: [{ Name: "nofile", Soft: 256, Hard: 256 }],
       },
     });
 
     await container.start();
 
     // Race: execution finishes OR timeout
+    let timer: NodeJS.Timeout | undefined;
     const result = await Promise.race([
       collectOutput(container),
-      new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), config.timeoutMs),
-      ),
-    ]);
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), config.timeoutMs);
+      }),
+    ]).finally(() => clearTimeout(timer));
 
     const durationMs = Date.now() - startTime;
 
@@ -101,8 +134,8 @@ export async function executeCode(
     }
 
     return {
-      stdout: result.stdout.slice(0, 10_000),
-      stderr: result.stderr.slice(0, 5_000),
+      stdout: result.stdout,
+      stderr: result.stderr,
       exitCode: result.exitCode,
       durationMs,
       status: result.exitCode === 0 ? "success" : "error",
@@ -115,6 +148,9 @@ export async function executeCode(
       durationMs: Date.now() - startTime,
       status: "error",
     };
+  } finally {
+    // Removed here, not with AutoRemove, so wait() can still read the exit code
+    await container?.remove({ force: true }).catch(() => {});
   }
 }
 
@@ -146,8 +182,11 @@ async function collectOutput(
         if (raw.length < 8 + size) break; // wait for more data
 
         const payload = raw.subarray(8, 8 + size);
-        if (type === 1) stdoutBuf = Buffer.concat([stdoutBuf, payload]);
-        else if (type === 2) stderrBuf = Buffer.concat([stderrBuf, payload]);
+        if (type === 1 && stdoutBuf.length < MAX_STDOUT_BYTES) {
+          stdoutBuf = Buffer.concat([stdoutBuf, payload]).subarray(0, MAX_STDOUT_BYTES);
+        } else if (type === 2 && stderrBuf.length < MAX_STDERR_BYTES) {
+          stderrBuf = Buffer.concat([stderrBuf, payload]).subarray(0, MAX_STDERR_BYTES);
+        }
 
         raw = raw.subarray(8 + size);
       }

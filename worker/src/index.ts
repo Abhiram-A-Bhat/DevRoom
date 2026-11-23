@@ -1,5 +1,5 @@
 import { Kafka } from "kafkajs";
-import { executeCode } from "./executor.js";
+import { executeCode, prepareImages } from "./executor.js";
 
 const kafka = new Kafka({
   clientId: "devroom-worker",
@@ -17,6 +17,7 @@ interface JobMessage {
 }
 
 async function main() {
+  await prepareImages();
   await producer.connect();
   await consumer.connect();
   console.log("[WORKER] Connected to Kafka");
